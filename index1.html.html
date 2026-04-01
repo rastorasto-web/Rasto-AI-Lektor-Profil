@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rasťo Kozlík | BalancedHR AI Lektor</title>
+    
+    <!-- 1. Načítanie Tailwind CSS pre dizajn -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Načítanie Reactu a ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- 3. Babel pre preklad JSX v prehliadači -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom animácie */
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+            animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
+        
+        /* CSS pre 3D kocku */
+        .scene {
+          perspective: 1000px;
+        }
+        .cube {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          transform-style: preserve-3d;
+          transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .cube-face {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          backface-visibility: hidden;
+          border-radius: 1.5rem;
+          background: white;
+          border: 1px solid #e5e7eb;
+        }
+        /* Front */
+        .face-0 { transform: rotateX(0deg) translateZ(160px); }
+        /* Bottom */
+        .face-1 { transform: rotateX(-90deg) translateZ(160px); }
+        /* Back */
+        .face-2 { transform: rotateX(-180deg) translateZ(160px); }
+        /* Top */
+        .face-3 { transform: rotateX(-270deg) translateZ(160px); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- DEFINÍCIE IKONIEK (Vložené priamo pre 100% funkčnosť) ---
+        const IconBase = ({ children, className, ...props }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="24" 
+                height="24" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className} 
+                {...props}
+            >
+                {children}
+            </svg>
+        );
+
+        const Brain = (props) => <IconBase {...props}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></IconBase>;
+        const Users = (props) => <IconBase {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>;
+        const Rocket = (props) => <IconBase {...props}><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></IconBase>;
+        const Target = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></IconBase>;
+        const CheckCircle = (props) => <IconBase {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconBase>;
+        const Linkedin = (props) => <IconBase {...props}><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></IconBase>;
+        const Mail = (props) => <IconBase {...props}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></IconBase>;
+        const Menu = (props) => <IconBase {...props}><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></IconBase>;
+        const X = (props) => <IconBase {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+        const ChevronRight = (props) => <IconBase {...props}><path d="m9 18 6-6-6-6"/></IconBase>;
+        const Award = (props) => <IconBase {...props}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></IconBase>;
+        const Briefcase = (props) => <IconBase {...props}><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></IconBase>;
+        const TrendingUp = (props) => <IconBase {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></IconBase>;
+        const Clock = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>;
+        const Quote = (props) => <IconBase {...props}><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/></IconBase>;
+        
+        // Nová ikonka pre Calendly (Kalendár)
+        const Calendar = (props) => <IconBase {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></IconBase>;
+
+        // --- TVOJ KOMPONENT ---
+
+        const RastoKozlikProfile = () => {
+            const [isScrolled, setIsScrolled] = useState(false);
+            const [isMenuOpen, setIsMenuOpen] = useState(false);
+            const [cubeRotation, setCubeRotation] = useState(0);
+            const cubeIntervalRef = useRef(null);
+
+            // ⚠️ SEM VLOŽ SVOJ REÁLNY CALENDLY LINK ⚠️
+            const calendlyLink = "https://calendly.com/rastislavkozlik/30min";
+
+            const colors = {
+                primary: '#E60000',      
+                primaryHover: '#C80000', 
+                darkRed: '#AA0000',      
+                black: '#000000',        
+                darkGrey: '#333333',     
+                textGrey: '#54595F',     
+                white: '#FFFFFF'
+            };
+
+            // Testimonials Data
+            const testimonials = [
+                {
+                name: "Pavlína",
+                role: "Relations Specialist",
+                text: "Ďakujeme veľmi pekne za pozvanie na workshop k vám do Trenčína a za skvelé školenie. Pán Kozlík je výborný školiteľ. Bolo to pre nás veľmi zaujímavé a užitočné. Verím, že sme u vás neboli naposledy."
+                },
+                {
+                name: "Danka",
+                role: "Key Account Manager",
+                text: "Ďakujem za super školenie, kde sme si mohli v priamom prenose na našom biznise vyskúšať funkcionality AI 😉. Tešíme sa na prvé kroky spolupráce s AI."
+                },
+                {
+                name: "Marcel",
+                role: "Účastník školenia AI pre efektívne HR",
+                text: "Rád by som sa vám poďakoval za hodnotné školenie a vyjadril uznanie vašej práce. Školenie bolo pre mňa veľmi podnetné a inšpiratívne pre ďalšie smerovanie mojej novej kariéry."
+                },
+                {
+                name: "Jana",
+                role: "HR Manager",
+                text: "Ďakujem za užitočné informácie a tipy na efektívnejšie využitie AI nástrojov. Veľmi mi to pomôže v mojej práci."
+                }
+            ];
+
+            useEffect(() => {
+                const handleScroll = () => {
+                setIsScrolled(window.scrollY > 50);
+                };
+                window.addEventListener('scroll', handleScroll);
+
+                startCubeRotation();
+
+                return () => {
+                window.removeEventListener('scroll', handleScroll);
+                stopCubeRotation();
+                };
+            }, []);
+
+            const startCubeRotation = () => {
+                stopCubeRotation();
+                cubeIntervalRef.current = setInterval(() => {
+                setCubeRotation(prev => prev - 90);
+                }, 5000);
+            };
+
+            const stopCubeRotation = () => {
+                if (cubeIntervalRef.current) clearInterval(cubeIntervalRef.current);
+            };
+
+            const handleCubeHover = () => {
+                stopCubeRotation();
+                setCubeRotation(prev => prev - 90);
+            };
+
+            const handleCubeLeave = () => {
+                startCubeRotation();
+            };
+
+            const scrollToSection = (id) => {
+                setIsMenuOpen(false);
+                const element = document.getElementById(id);
+                if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+                }
+            };
+
+            const workshops = [
+                {
+                title: "AI pre efektívne HR",
+                icon: <Users className="w-8 h-8 text-white" />,
+                description: "Transformujte nábor a riadenie talentov. Naučte sa tvoriť pútavé inzeráty, analyzovať životopisy a automatizovať komunikáciu s kandidátmi pomocou AI.",
+                benefits: ["Rýchlejší screening CV", "Employer branding 2.0", "Personalizovaná komunikácia"],
+                link: "https://balanced-hr.com/vzdelavanie/workshop-ai-pre-efektivne-hr/"
+                },
+                {
+                title: "AI pre efektívny Sales",
+                icon: <TrendingUp className="w-8 h-8 text-white" />,
+                description: "Zvýšte svoje predajné čísla. Ukážem vám, ako využiť AI na generovanie leadov, prípravu na obchodné stretnutia a tvorbu neodmietnuteľných ponúk.",
+                benefits: ["Inteligentná analýza klientov", "Tvorba sales scriptov", "Automatizácia follow-upov"],
+                link: "https://balanced-hr.com/vzdelavanie/workshop-ai-pre-efektivny-sales/"
+                },
+                {
+                title: "Krok do sveta AI",
+                icon: <Rocket className="w-8 h-8 text-white" />,
+                description: "Ideálny štart pre tímy. Od základov promptovania až po bezpečné používanie nástrojov ako ChatGPT či Copilot v každodennej praxi.",
+                benefits: ["Základy Prompt Engineeringu", "Prehľad AI nástrojov", "Okamžité zvýšenie produktivity"],
+                link: "https://balanced-hr.com/vzdelavanie/krok-do-sveta-ai/"
+                },
+                {
+                title: "Pokročilé využitie AI",
+                icon: <Brain className="w-8 h-8 text-white" />,
+                description: "Pre tých, ktorí chcú ísť do hĺbky. Komplexné workflows, automatizácia administratívy a pokročilé techniky pre HR aj Sales tímy.",
+                benefits: ["Komplexné Case Studies", "Vlastné GPTs", "Integrácia do procesov"],
+                link: "https://balanced-hr.com/vzdelavanie/pokrocile-vyuzitie-ai-pre-efektivnost-v-hr-sales-a-administrative/"
+                }
+            ];
+
+            return (
+                <div className="font-sans text-[#333333] bg-white min-h-screen flex flex-col">
+                
+                {/* Navigation */}
+                <nav 
+                    className={`fixed w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-white shadow-md py-2' : 'bg-transparent py-4'}`}
+                >
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                    <div className="flex items-center gap-2 font-bold text-2xl tracking-tighter text-black">
+                        <span className="text-[#E60000]">Balanced</span>HR <span className="text-[#54595F] font-light">|</span> <span className="text-sm uppercase tracking-widest font-medium mt-1">Rasťo Kozlík</span>
+                    </div>
+
+                    {/* Desktop Menu */}
+                    <div className="hidden md:flex items-center space-x-6">
+                        {['O mne', 'Workshopy', 'Prínos', 'Referencie', 'Kontakt'].map((item) => (
+                        <button 
+                            key={item}
+                            onClick={() => scrollToSection(item.toLowerCase().replace(' ', '-'))}
+                            className="text-[#333333] hover:text-[#E60000] font-medium transition-colors"
+                        >
+                            {item}
+                        </button>
+                        ))}
+                        
+                        <div className="flex items-center gap-4 pl-4 border-l border-gray-200">
+                            {/* LinkedIn Icon Link */}
+                            <a 
+                                href="https://www.linkedin.com/in/rastislavkozlik/" 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-[#54595F] hover:text-[#0077b5] transition-colors"
+                                title="Môj LinkedIn profil"
+                            >
+                                <Linkedin size={22} />
+                            </a>
+                            
+                            {/* Calendly Button */}
+                            <a 
+                                href={calendlyLink} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="bg-[#E60000] hover:bg-[#C80000] text-white px-5 py-2.5 rounded-full font-semibold text-sm transition-all transform hover:scale-105 flex items-center gap-2 shadow-md hover:shadow-lg"
+                            >
+                                <Calendar size={18} />
+                                Free konzultácia
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Mobile Menu Button */}
+                    <button className="md:hidden text-[#333333]" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                        {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+                    </button>
+                    </div>
+
+                    {/* Mobile Dropdown */}
+                    {isMenuOpen && (
+                    <div className="md:hidden bg-white absolute top-full left-0 w-full shadow-lg py-4 px-6 flex flex-col space-y-4 border-t border-gray-100">
+                        {['O mne', 'Workshopy', 'Prínos', 'Referencie', 'Kontakt'].map((item) => (
+                        <button 
+                            key={item}
+                            onClick={() => scrollToSection(item.toLowerCase().replace(' ', '-'))}
+                            className="text-left text-[#333333] hover:text-[#E60000] font-medium py-2"
+                        >
+                            {item}
+                        </button>
+                        ))}
+                        <div className="pt-4 border-t border-gray-100 flex flex-col gap-3">
+                            <a 
+                                href={calendlyLink} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="bg-[#E60000] text-white text-center py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                            >
+                                <Calendar size={20} />
+                                Free online konzultácia
+                            </a>
+                            <a 
+                                href="https://www.linkedin.com/in/rastislavkozlik/" 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="bg-gray-100 text-[#333333] text-center py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                            >
+                                <Linkedin size={20} />
+                                LinkedIn
+                            </a>
+                        </div>
+                    </div>
+                    )}
+                </nav>
+
+                {/* Hero Section */}
+                <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+                    <div className="absolute inset-0 z-0 opacity-5 bg-[radial-gradient(#E60000_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                    
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                    <div className="flex flex-col lg:flex-row items-center gap-12">
+                        <div className="lg:w-1/2 space-y-8">
+                        <div className="inline-flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-100">
+                            <span className="w-2 h-2 rounded-full bg-[#E60000] animate-pulse"></span>
+                            <span className="text-[#AA0000] text-sm font-semibold tracking-wide uppercase">AI Lektor & HR Expert</span>
+                        </div>
+                        
+                        <h1 className="text-5xl lg:text-7xl font-extrabold text-black leading-tight">
+                            Umelá inteligencia <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E60000] to-[#C80000]">
+                            v praxi, nie v teórii.
+                            </span>
+                        </h1>
+                        
+                        <p className="text-xl text-[#54595F] max-w-2xl leading-relaxed">
+                            Spájam 12-ročné skúsenosti v HR s najnovšími AI technológiami. Pomáham firmám premeniť AI na ich najsilnejšiu konkurenčnú výhodu.
+                        </p>
+
+                        <div className="flex flex-wrap gap-4 pt-4">
+                            {/* Nové Calendly tlačidlo ako primárny Call to Action */}
+                            <a 
+                                href={calendlyLink} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="bg-[#E60000] hover:bg-[#C80000] text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center gap-2 transform hover:-translate-y-1"
+                            >
+                                <Calendar size={22} />
+                                Free online konzultácia
+                            </a>
+                            
+                            <button 
+                                onClick={() => scrollToSection('workshopy')}
+                                className="bg-black hover:bg-[#333333] text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center gap-2 border border-black"
+                            >
+                                Vybrať workshop <ChevronRight size={20} />
+                            </button>
+                            
+                            <button 
+                                onClick={() => scrollToSection('o-mne')}
+                                className="bg-white border-2 border-[#E5E5E5] hover:border-[#E60000] hover:text-[#E60000] text-[#333333] px-8 py-4 rounded-xl font-bold text-lg transition-all w-full sm:w-auto text-center justify-center flex"
+                            >
+                                Spoznajte ma
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-6 pt-8 border-t border-gray-200">
+                            <div>
+                            <div className="text-3xl font-bold text-[#E60000]">2012</div>
+                            <div className="text-sm text-[#54595F] font-medium">V HR prostredí</div>
+                            </div>
+                            <div>
+                            <div className="text-3xl font-bold text-black">50+</div>
+                            <div className="text-sm text-[#54595F] font-medium">Vyškolených firiem</div>
+                            </div>
+                            <div>
+                            <div className="text-3xl font-bold text-black">2023</div>
+                            <div className="text-sm text-[#54595F] font-medium">Lektor AI</div>
+                            </div>
+                        </div>
+                        </div>
+
+                        <div className="lg:w-1/2 relative flex flex-col items-center">
+                        {/* Image Wrapper */}
+                        <div className="relative rounded-3xl overflow-hidden shadow-2xl border-8 border-white bg-gray-100 aspect-square w-3/4 mx-auto">
+                            <img 
+                            src="./RKfoto.png" 
+                            alt="Rasťo Kozlík - AI Lektor" 
+                            className="w-full h-full object-cover"
+                            />
+                            
+                            {/* Desktop Badge (Visible ONLY on large screens) */}
+                            <div className="hidden lg:block absolute bottom-8 left-8 bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-lg border-l-4 border-[#E60000] max-w-xs">
+                            <div className="flex items-start gap-3">
+                                <div className="bg-red-50 p-2 rounded-lg text-[#E60000]">
+                                <Clock size={24} />
+                                </div>
+                                <div>
+                                <p className="font-bold text-black">Expertíza overená časom</p>
+                                <p className="text-xs text-[#54595F]">HR prax už od roku 2012.</p>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                        
+                        {/* Mobile Badge (Visible ONLY on mobile, placed below image) */}
+                        <div className="lg:hidden mt-6 bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-lg border-l-4 border-[#E60000] max-w-xs mx-auto w-3/4 relative z-20">
+                            <div className="flex items-start gap-3">
+                                <div className="bg-red-50 p-2 rounded-lg text-[#E60000]">
+                                <Clock size={24} />
+                                </div>
+                                <div>
+                                <p className="font-bold text-black">Expertíza overená časom</p>
+                                <p className="text-xs text-[#54595F]">HR prax už od roku 2012.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="absolute -z-10 top-10 -right-10 w-72 h-72 bg-red-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob"></div>
+                        <div className="absolute -z-10 -bottom-10 -left-10 w-72 h-72 bg-gray-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob animation-delay-2000"></div>
+                        </div>
+                    </div>
+                    </div>
+                </section>
+
+                {/* About Section */}
+                <section id="o-mne" className="py-20 bg-[#F9FAFB]">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="max-w-3xl mx-auto text-center mb-16">
+                        <h2 className="text-3xl lg:text-4xl font-bold text-black mb-6">Viac než len technológie</h2>
+                        <p className="text-lg text-[#54595F] leading-relaxed">
+                        Volám sa <span className="font-bold text-black">Rasťo Kozlík</span>. Nie som len IT nadšenec. 
+                        <span className="bg-red-50 text-[#C80000] px-2 py-1 rounded mx-1 font-semibold">V HR svete sa pohybujem už od roku 2012.</span>
+                        Rozumiem procesom, ľuďom a výzvam, ktorým čelíte, pretože som ich zažil na vlastnej koži. AI neučím ako "hype", ale ako praktický nástroj pre HR a biznis.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-8">
+                        {[
+                        {
+                            icon: <Briefcase className="w-6 h-6 text-[#E60000]" />,
+                            title: "12+ rokov v HR",
+                            text: "Moje školenia nie sú o teórii z internetu. Staviam na viac ako dekáde skúseností v HR prostredí. Rozumiem kontextu vašej práce."
+                        },
+                        {
+                            icon: <Target className="w-6 h-6 text-[#E60000]" />,
+                            title: "Interaktívny prístup",
+                            text: "Žiadne nudné prednášky. Moje workshopy sú postavené na 'hands-on' prístupe. Účastníci odchádzajú s nastavenými nástrojmi."
+                        },
+                        {
+                            icon: <Award className="w-6 h-6 text-[#E60000]" />,
+                            title: "Case Studies",
+                            text: "Riešime konkrétne zadania: Ako napísať inzerát? Ako osloviť klienta? Ako zautomatizovať report? Všetko na reálnych príkladoch."
+                        }
+                        ].map((feature, idx) => (
+                        <div key={idx} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:border-[#E60000] hover:shadow-md transition-all duration-300">
+                            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mb-6">
+                            {feature.icon}
+                            </div>
+                            <h3 className="text-xl font-bold text-black mb-3">{feature.title}</h3>
+                            <p className="text-[#54595F]">{feature.text}</p>
+                        </div>
+                        ))}
+                    </div>
+                    </div>
+                </section>
+
+                {/* Workshops Section */}
+                <section id="workshopy" className="py-20 bg-white">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+                        <div>
+                        <h2 className="text-3xl lg:text-4xl font-bold text-black mb-4">Moje workshopy</h2>
+                        <p className="text-lg text-[#54595F]">Vyberte si oblasť, ktorú potrebujete zefektívniť.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8">
+                        {workshops.map((workshop, index) => (
+                        <div key={index} className="group relative bg-white rounded-3xl border border-gray-200 overflow-hidden hover:border-[#E60000] transition-all duration-300 hover:shadow-xl flex flex-col h-full">
+                            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity transform group-hover:scale-110 text-black">
+                            {React.cloneElement(workshop.icon, { className: "w-32 h-32" })}
+                            </div>
+                            
+                            <div className="p-8 flex flex-col h-full relative z-10">
+                            <div className="w-16 h-16 bg-gradient-to-br from-[#333333] to-black rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-[#54595F]">
+                                {workshop.icon}
+                            </div>
+                            
+                            <h3 className="text-2xl font-bold text-black mb-3">{workshop.title}</h3>
+                            <p className="text-[#54595F] mb-6 flex-grow">{workshop.description}</p>
+                            
+                            <ul className="space-y-3 mb-8">
+                                {workshop.benefits.map((benefit, i) => (
+                                <li key={i} className="flex items-center gap-3 text-sm font-medium text-[#333333]">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-[#E60000]"></div>
+                                    {benefit}
+                                </li>
+                                ))}
+                            </ul>
+
+                            <a 
+                                href={workshop.link} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="inline-flex items-center justify-center w-full bg-gray-50 hover:bg-[#E60000] hover:text-white text-black font-semibold py-4 rounded-xl transition-colors border border-gray-200 hover:border-[#E60000]"
+                            >
+                                Zistiť viac o obsahu <ChevronRight size={18} className="ml-2" />
+                            </a>
+                            </div>
+                        </div>
+                        ))}
+                    </div>
+                    </div>
+                </section>
+
+                {/* Value Proposition */}
+                <section id="prínos" className="py-20 bg-[#000000] text-white relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]"></div>
+                    
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+                    <div>
+                        <h2 className="text-3xl lg:text-4xl font-bold mb-6">
+                        Prečo sa firmám oplatí <br />
+                        <span className="text-[#E60000]">poslať ľudí na môj workshop?</span>
+                        </h2>
+                        <p className="text-[#D1D5DB] text-lg mb-12 leading-relaxed max-w-2xl mx-auto">
+                        AI nie je o náhrade ľudí, ale o ich "superschopnostiach". Vďaka mojej HR praxi viem presne, kde vás tlačí topánka a nezdržujem vás technickými detailmi, ktoré v práci nevyužijete.
+                        </p>
+                        
+                        <div className="grid md:grid-cols-3 gap-8 text-left">
+                        {[
+                            { title: "Okamžitá aplikácia", desc: "Čo sa naučíte doobeda, poobede používate v práci." },
+                            { title: "Expertíza v HR", desc: "Viem, čo znamená nábor, onboarding či sales. Učím v kontexte." },
+                            { title: "Prispôsobenie", desc: "Malá firma? Korporát? Prispôsobujem príklady vášmu kontextu." }
+                        ].map((item, i) => (
+                            <div key={i} className="bg-[#333333] p-6 rounded-2xl border border-[#54595F] hover:border-[#E60000] transition-colors">
+                            <div className="mb-4">
+                                <CheckCircle className="text-[#E60000] w-8 h-8" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-xl mb-2">{item.title}</h4>
+                                <p className="text-gray-400 text-sm">{item.desc}</p>
+                            </div>
+                            </div>
+                        ))}
+                        </div>
+                    </div>
+                    </div>
+                </section>
+
+                {/* Testimonials Section - The 3D Cube */}
+                <section id="referencie" className="py-24 bg-gray-50 overflow-hidden">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-12">
+                    <h2 className="text-3xl font-bold text-black">Čo hovoria účastníci</h2>
+                    <p className="text-[#54595F] mt-2">Prejdite myšou po kartičke pre ďalšiu referenciu</p>
+                    </div>
+
+                    <div className="w-full max-w-2xl mx-auto px-4 h-[320px]">
+                    <div className="scene w-full h-full" onMouseEnter={handleCubeHover} onMouseLeave={handleCubeLeave}>
+                        <div className="cube" style={{ transform: `translateZ(-160px) rotateX(${cubeRotation}deg)` }}>
+                        
+                        {testimonials.map((item, index) => (
+                            <div key={index} className={`cube-face face-${index} p-8 flex flex-col items-center justify-center shadow-xl bg-white`}>
+                            <Quote className="w-10 h-10 text-[#E60000] mb-4 opacity-20" />
+                            <p className="text-lg text-[#333333] text-center italic mb-6 leading-relaxed font-medium">
+                                "{item.text}"
+                            </p>
+                            <div className="mt-auto text-center">
+                                <h4 className="text-xl font-bold text-black">{item.name}</h4>
+                                <p className="text-sm text-[#E60000] font-semibold uppercase tracking-wide mt-1">{item.role}</p>
+                            </div>
+                            <div className="absolute bottom-4 right-4 text-xs text-gray-300">
+                                {index + 1} / 4
+                            </div>
+                            </div>
+                        ))}
+
+                        </div>
+                    </div>
+                    </div>
+                </section>
+
+                {/* Contact Section */}
+                <section id="kontakt" className="py-20 bg-[#FFF5F5]">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <h2 className="text-3xl lg:text-4xl font-bold text-black mb-6">Posuňte vašu firmu vpred</h2>
+                    <p className="text-xl text-[#54595F] mb-10">
+                        Máte záujem o workshop na mieru alebo sa chcete poradiť, ktorý kurz je pre vás vhodný?
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row justify-center gap-6">
+                        {/* Calendly Button v kontakte */}
+                        <a 
+                        href={calendlyLink} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-3 bg-[#E60000] hover:bg-[#C80000] text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+                        >
+                        <Calendar size={24} />
+                        Zarezervovať free konzultáciu
+                        </a>
+                        
+                        <a 
+                        href="https://www.linkedin.com/in/rastislavkozlik/" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-3 bg-[#0077b5] hover:bg-[#006396] text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+                        >
+                        <Linkedin size={24} />
+                        Napíšte mi
+                        </a>
+                        
+                        <a 
+                        href="mailto:rastislav.kozlik@balanced-hr.com" 
+                        className="flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-black border-2 border-gray-200 px-8 py-4 rounded-xl font-bold text-lg transition-all hover:border-[#E60000] hover:text-[#E60000]"
+                        >
+                        <Mail size={24} className="text-[#E60000]" />
+                        Email
+                        </a>
+                    </div>
+
+                    <div className="mt-16 border-t border-red-200 pt-8">
+                        <p className="text-[#54595F] text-sm">
+                        © {new Date().getFullYear()} Rasťo Kozlík & BalancedHR. Všetky práva vyhradené.
+                        </p>
+                    </div>
+                    </div>
+                </section>
+
+                </div>
+            );
+        };
+
+        // Spustenie aplikácie do divu "root"
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<RastoKozlikProfile />);
+    </script>
+</body>
+</html>
